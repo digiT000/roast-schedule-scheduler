@@ -44,7 +44,7 @@ const Index = () => {
       case 'orders':
         return <OrderManager orders={orders} setOrders={setOrders} machines={machines} />;
       case 'gantt':
-        return <GanttChart orders={orders} machines={machines} />;
+        return <GanttChart orders={orders} machines={machines} setOrders={setOrders} />;
       default:
         return <Dashboard machines={machines} orders={orders} />;
     }

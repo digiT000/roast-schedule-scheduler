@@ -1,14 +1,16 @@
+
 import React from 'react';
 import { Machine, Order } from '../types';
-import { Calendar, Clock, FileSpreadsheet } from 'lucide-react';
+import { Calendar, Clock, FileSpreadsheet, Play } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface GanttChartProps {
   orders: Order[];
   machines: Machine[];
+  setOrders?: (orders: Order[]) => void;
 }
 
-export const GanttChart: React.FC<GanttChartProps> = ({ orders, machines }) => {
+export const GanttChart: React.FC<GanttChartProps> = ({ orders, machines, setOrders }) => {
   const today = new Date();
   const startOfDay = new Date(today);
   startOfDay.setHours(8, 0, 0, 0); // Start at 8 AM
@@ -19,6 +21,59 @@ export const GanttChart: React.FC<GanttChartProps> = ({ orders, machines }) => {
   for (let hour = 8; hour <= 18; hour++) {
     timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
   }
+
+  const startRoasting = (orderId: string) => {
+    if (!setOrders) return;
+
+    const now = new Date();
+    const orderToStart = orders.find(order => order.id === orderId);
+    if (!orderToStart) return;
+
+    // Calculate duration from original order
+    const originalDuration = orderToStart.endTime.getTime() - orderToStart.startTime.getTime();
+    const newEndTime = new Date(now.getTime() + originalDuration);
+
+    // Update the order that's starting
+    const updatedOrders = orders.map(order => {
+      if (order.id === orderId) {
+        return {
+          ...order,
+          status: 'in-progress' as const,
+          startTime: now,
+          endTime: newEndTime
+        };
+      }
+      return order;
+    });
+
+    // Recalculate schedules for other orders on the same machine
+    const machineId = orderToStart.machineId;
+    const machineOrders = updatedOrders
+      .filter(order => order.machineId === machineId && order.status !== 'completed')
+      .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+
+    let nextAvailableTime = newEndTime;
+
+    // Reschedule subsequent orders
+    const finalOrders = updatedOrders.map(order => {
+      if (order.machineId === machineId && order.id !== orderId && order.status === 'scheduled') {
+        const duration = order.endTime.getTime() - order.startTime.getTime();
+        const newStart = new Date(nextAvailableTime.getTime() + 30 * 60 * 1000); // 30 min buffer
+        const newEnd = new Date(newStart.getTime() + duration);
+        
+        nextAvailableTime = newEnd;
+        
+        return {
+          ...order,
+          startTime: newStart,
+          endTime: newEnd
+        };
+      }
+      return order;
+    });
+
+    setOrders(finalOrders);
+  };
 
   const exportToExcel = () => {
     const exportData = orders.map(order => {
@@ -159,11 +214,22 @@ export const GanttChart: React.FC<GanttChartProps> = ({ orders, machines }) => {
                     return (
                       <div
                         key={order.id}
-                        className={`absolute top-2 h-12 rounded border-2 px-2 py-1 text-xs ${getBeanTypeColor(order.beanType)}`}
+                        className={`absolute top-2 h-12 rounded border-2 px-2 py-1 text-xs ${getBeanTypeColor(order.beanType)} flex items-center justify-between`}
                         style={{ left: `${position.left}%`, width: `${position.width}%` }}
                       >
-                        <div className="font-medium truncate">{order.clientName}</div>
-                        <div className="truncate">{order.weight}kg</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{order.clientName}</div>
+                          <div className="truncate">{order.weight}kg</div>
+                        </div>
+                        {order.status === 'scheduled' && setOrders && (
+                          <button
+                            onClick={() => startRoasting(order.id)}
+                            className="ml-2 p-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex-shrink-0"
+                            title="Start Roasting"
+                          >
+                            <Play size={12} />
+                          </button>
+                        )}
                       </div>
                     );
                   })}

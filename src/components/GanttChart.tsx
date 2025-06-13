@@ -1,7 +1,7 @@
-
 import React from 'react';
 import { Machine, Order } from '../types';
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface GanttChartProps {
   orders: Order[];
@@ -19,6 +19,47 @@ export const GanttChart: React.FC<GanttChartProps> = ({ orders, machines }) => {
   for (let hour = 8; hour <= 18; hour++) {
     timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
   }
+
+  const exportToExcel = () => {
+    const exportData = orders.map(order => {
+      const machine = machines.find(m => m.id === order.machineId);
+      return {
+        'Client Name': order.clientName,
+        'Bean Type': order.beanType,
+        'Weight (kg)': order.weight,
+        'Machine': machine?.name || 'Unknown',
+        'Machine Capacity (kg)': machine?.capacity || 'Unknown',
+        'Start Time': order.startTime.toLocaleString(),
+        'End Time': order.endTime.toLocaleString(),
+        'Status': order.status.replace('-', ' '),
+        'Date': order.startTime.toLocaleDateString(),
+        'Duration (minutes)': Math.round((order.endTime.getTime() - order.startTime.getTime()) / (1000 * 60))
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    
+    // Auto-size columns
+    const columnWidths = [
+      { wch: 20 }, // Client Name
+      { wch: 25 }, // Bean Type
+      { wch: 12 }, // Weight
+      { wch: 15 }, // Machine
+      { wch: 18 }, // Machine Capacity
+      { wch: 20 }, // Start Time
+      { wch: 20 }, // End Time
+      { wch: 12 }, // Status
+      { wch: 12 }, // Date
+      { wch: 15 }  // Duration
+    ];
+    worksheet['!cols'] = columnWidths;
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Roasting Schedule');
+    
+    const fileName = `roasting-schedule-${today.toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+  };
 
   const getOrderPosition = (order: Order) => {
     const orderStart = new Date(order.startTime);
@@ -61,8 +102,17 @@ export const GanttChart: React.FC<GanttChartProps> = ({ orders, machines }) => {
           <Calendar className="h-6 w-6 text-amber-600" />
           <h2 className="text-2xl font-bold text-amber-900">Roasting Schedule</h2>
         </div>
-        <div className="text-sm text-amber-700">
-          {today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={exportToExcel}
+            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            <FileSpreadsheet size={18} />
+            <span>Export to Excel</span>
+          </button>
+          <div className="text-sm text-amber-700">
+            {today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </div>
         </div>
       </div>
 
